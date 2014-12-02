@@ -43,11 +43,14 @@ import org.codehaus.enunciate.Facet;
 import org.codehaus.enunciate.jaxrs.ResponseCode;
 import org.codehaus.enunciate.jaxrs.StatusCodes;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.dataaccess.datasource.api.DataSourceWizardService;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
+import org.pentaho.platform.web.http.api.resources.FileResource;
 import org.pentaho.platform.web.http.api.resources.JaxbList;
 
 import com.sun.jersey.multipart.FormDataParam;
+import org.pentaho.platform.web.http.api.resources.services.FileService;
 
 /**
  * This service allows for listing, download, and removal of DSW data sources in the BA Platform.
@@ -299,5 +302,56 @@ public class DataSourceWizardResource {
   @Facet( name = "Unsupported" )
   public Response doRemoveMetadata( @PathParam( "dswId" ) String metadataId ) {
     return remove( metadataId );
+  }
+
+  /**
+   * Get ACL for the DSW by name
+   *
+   * @param   dswId DSW data source name
+   * @return  ACL or null if the data source doesn't have it
+   * @throws  PentahoAccessControlException if the user doesn't have access
+   */
+  @GET
+  @Path( "/{dswId : .+}/acl" )
+  @Produces ( { APPLICATION_XML, APPLICATION_JSON } )
+  @StatusCodes( {
+      @ResponseCode( code = 200, condition = "Successfully got the ACL" ),
+      @ResponseCode( code = 401, condition = "Unauthorized" ),
+      @ResponseCode(
+          code = 500,
+          condition = "ACL failed to be retrieved. This could be caused by an invalid path, or the file does not exist."
+      )
+  } )
+  public RepositoryFileAclDto doGetDSWAcl( @PathParam( "dswId" ) String dswId )
+      throws PentahoAccessControlException {
+    return service.getDSWAcl( dswId );
+  }
+
+  /**
+   * Set ACL for the DSW
+   *
+   * @param dswId DSW name
+   * @param acl   ACL to set
+   * @return      response
+   * @throws      PentahoAccessControlException if the user doesn't have access
+   */
+  @PUT
+  @Path( "/{dswId : .+}/acl" )
+  @Produces ( { APPLICATION_XML, APPLICATION_JSON } )
+  @StatusCodes( {
+      @ResponseCode( code = 200, condition = "Successfully updated the ACL" ),
+      @ResponseCode( code = 401, condition = "Unauthorized" ),
+      @ResponseCode( code = 500, condition = "Failed to save acls due to another error." )
+  } )
+  public Response doSetDSWAcl( @PathParam( "dswId" ) String dswId, RepositoryFileAclDto acl )
+      throws PentahoAccessControlException {
+    try {
+      service.setDSWAcl( dswId, acl );
+      return buildOkResponse();
+    } catch ( PentahoAccessControlException e ) {
+      return buildUnauthorizedResponse();
+    } catch ( Exception e ) {
+      return buildServerErrorResponse();
+    }
   }
 }

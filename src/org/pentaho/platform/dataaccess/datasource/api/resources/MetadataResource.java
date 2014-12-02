@@ -23,6 +23,7 @@ import static javax.ws.rs.core.MediaType.WILDCARD;
 import static javax.ws.rs.core.Response.Status.CREATED;
 import static javax.ws.rs.core.Response.Status.UNAUTHORIZED;
 
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
@@ -453,5 +454,56 @@ public class MetadataResource {
                                             @FormDataParam( DATASOURCE_ACL )
                                             RepositoryFileAclDto acl) {
     return importMetadataDatasource( domainId, metadataFile, metadataFileInfo, overwrite, localeFiles, localeFilesInfo, acl );
+  }
+
+  /**
+   * Get ACL for the metadata data source by name
+   *
+   * @param   domainId metadata data source name
+   * @return  ACL or null if the data source doesn't have it
+   * @throws  PentahoAccessControlException if the user doesn't have access
+   */
+  @GET
+  @Path( "/{domainId : .+}/acl" )
+  @Produces ( { APPLICATION_XML, APPLICATION_JSON } )
+  @StatusCodes( {
+      @ResponseCode( code = 200, condition = "Successfully got the ACL" ),
+      @ResponseCode( code = 401, condition = "Unauthorized" ),
+      @ResponseCode(
+          code = 500,
+          condition = "ACL failed to be retrieved. This could be caused by an invalid path, or the file does not exist."
+      )
+  } )
+  public RepositoryFileAclDto doGetMetadataAcl( @PathParam( "domainId" ) String domainId )
+      throws PentahoAccessControlException {
+    return service.getMetadataAcl( domainId );
+  }
+
+  /**
+   * Set ACL for the metadata data source
+   *
+   * @param domainId  metadata data source name
+   * @param acl       ACL to set
+   * @return          response
+   * @throws          PentahoAccessControlException if the user doesn't have access
+   */
+  @PUT
+  @Path( "/{domainId : .+}/acl" )
+  @Produces ( { APPLICATION_XML, APPLICATION_JSON } )
+  @StatusCodes( {
+      @ResponseCode( code = 200, condition = "Successfully updated the ACL" ),
+      @ResponseCode( code = 401, condition = "Unauthorized" ),
+      @ResponseCode( code = 500, condition = "Failed to save acls due to another error." )
+  } )
+  public Response doSetDSWAcl( @PathParam( "domainId" ) String domainId, RepositoryFileAclDto acl )
+      throws PentahoAccessControlException {
+    try {
+      service.setMetadataAcl( domainId, acl );
+      return buildOkResponse();
+    } catch ( PentahoAccessControlException e ) {
+      return buildUnauthorizedResponse();
+    } catch ( Exception e ) {
+      return buildServerErrorResponse();
+    }
   }
 }

@@ -18,6 +18,7 @@
 package org.pentaho.platform.dataaccess.datasource.api;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ import org.apache.commons.logging.LogFactory;
 import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
 import org.pentaho.platform.engine.core.system.PentahoSystem;
 import org.pentaho.platform.plugin.action.mondrian.catalog.IMondrianCatalogService;
@@ -46,6 +48,7 @@ import org.pentaho.platform.plugin.services.importer.RepositoryFileImportBundle;
 import org.pentaho.platform.plugin.services.importexport.legacy.MondrianCatalogRepositoryHelper;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclAdapter;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
+import org.pentaho.platform.web.http.api.resources.services.FileService;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
@@ -120,6 +123,25 @@ public class AnalysisService extends DatasourceService {
     String fileName = schemaFileInfo.getFileName();
     processMondrianImport( dataInputStream, catalogName, origCatalogName, overwrite, xmlaEnabledFlag, parameters,
       fileName, acl );
+  }
+
+  public RepositoryFileAclDto getAnalysisDatasourceAcl( String analysisId ) throws PentahoAccessControlException {
+    if ( !canAdministerCheck() ) {
+      throw new PentahoAccessControlException();
+    }
+    RepositoryFile aclNode = null;
+    // TODO: get the ACL node
+    return aclNode == null ? null : fileService.doGetFileAcl( aclNode.getPath() );
+  }
+
+  public void setAnalysisDatasourceAcl( String analysisId, RepositoryFileAclDto acl )
+      throws PentahoAccessControlException, FileNotFoundException {
+    if ( !canAdministerCheck() ) {
+      throw new PentahoAccessControlException();
+    }
+    RepositoryFile aclNode = null;
+    // TODO: get the ACL node, create the node if needed
+    fileService.setFileAcls( aclNode.getPath(), acl );
   }
 
   /**

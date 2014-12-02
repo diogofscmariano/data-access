@@ -18,6 +18,7 @@
 package org.pentaho.platform.dataaccess.datasource.api;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.messages.Messages;
 import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
 import org.pentaho.platform.engine.core.system.PentahoSystem;
@@ -39,6 +41,7 @@ import org.pentaho.platform.web.http.api.resources.FileResource;
 
 import com.sun.jersey.core.header.FormDataContentDisposition;
 import com.sun.jersey.multipart.FormDataBodyPart;
+import org.pentaho.platform.web.http.api.resources.services.FileService;
 
 public class MetadataService extends DatasourceService {
 
@@ -101,6 +104,25 @@ public class MetadataService extends DatasourceService {
     importer.importFile( bundle );
     IPentahoSession pentahoSession = getSession();
     publish( pentahoSession );
+  }
+
+  public RepositoryFileAclDto getMetadataAcl( String domainId ) throws PentahoAccessControlException {
+    if ( !canAdministerCheck() ) {
+      throw new PentahoAccessControlException();
+    }
+    RepositoryFile aclNode = null;
+    // TODO: get the ACL node
+    return aclNode == null ? null : fileService.doGetFileAcl( aclNode.getPath() );
+  }
+
+  public void setMetadataAcl( String domainId, RepositoryFileAclDto acl )
+      throws PentahoAccessControlException, FileNotFoundException {
+    if ( !canAdministerCheck() ) {
+      throw new PentahoAccessControlException();
+    }
+    RepositoryFile aclNode = null;
+    // TODO: get the ACL node, create the node if needed
+    fileService.setFileAcls( aclNode.getPath(), acl );
   }
 
   protected void sleep( int i ) throws InterruptedException {

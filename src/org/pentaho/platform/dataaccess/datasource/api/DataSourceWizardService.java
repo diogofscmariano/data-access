@@ -17,6 +17,7 @@
 
 package org.pentaho.platform.dataaccess.datasource.api;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
 import org.pentaho.platform.api.repository.datasource.IDatasourceMgmtService;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.dataaccess.datasource.api.DataSourceWizardService.DswPublishValidationException.Type;
 import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
 import org.pentaho.platform.dataaccess.datasource.utils.DataAccessPermissionUtil;
@@ -60,6 +62,7 @@ import org.pentaho.platform.plugin.services.importexport.legacy.MondrianCatalogR
 import org.pentaho.platform.plugin.services.metadata.IPentahoMetadataDomainRepositoryExporter;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclAdapter;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
+import org.pentaho.platform.web.http.api.resources.services.FileService;
 
 public class DataSourceWizardService extends DatasourceService {
 
@@ -218,6 +221,25 @@ public class DataSourceWizardService extends DatasourceService {
     PentahoSystem.publish( session, MONDRIAN_PUBLISHER );
     logger.info( "publishDsw: Published DSW with domainId='" + domainId + "'." );
     return domainId;
+  }
+
+  public RepositoryFileAclDto getDSWAcl( String dswId ) throws PentahoAccessControlException {
+    if ( !canAdministerCheck() ) {
+      throw new PentahoAccessControlException();
+    }
+    RepositoryFile aclNode = null;
+    // TODO: get the ACL node
+    return aclNode == null ? null : fileService.doGetFileAcl( aclNode.getPath() );
+  }
+
+  public void setDSWAcl( String dswId, RepositoryFileAclDto acl )
+      throws PentahoAccessControlException, FileNotFoundException {
+    if ( !canAdministerCheck() ) {
+      throw new PentahoAccessControlException();
+    }
+    RepositoryFile aclNode = null;
+    // TODO: get the ACL node, create the node if needed
+    fileService.setFileAcls( aclNode.getPath(), acl );
   }
 
   public static class DswPublishValidationException extends Exception {

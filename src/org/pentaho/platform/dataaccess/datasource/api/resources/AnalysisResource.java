@@ -24,16 +24,18 @@ import org.codehaus.enunciate.Facet;
 import org.codehaus.enunciate.jaxrs.ResponseCode;
 import org.codehaus.enunciate.jaxrs.StatusCodes;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.dataaccess.datasource.api.AnalysisService;
 import org.pentaho.platform.plugin.services.importer.PlatformImportException;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
+import org.pentaho.platform.web.http.api.resources.FileResource;
 import org.pentaho.platform.web.http.api.resources.JaxbList;
+import org.pentaho.platform.web.http.api.resources.services.FileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
-import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
@@ -409,6 +411,10 @@ public class AnalysisResource {
     return Response.status( UNAUTHORIZED ).build();
   }
 
+  protected Response buildServerErrorResponse() {
+    return Response.serverError().build();
+  }
+
   /**
    * Get list of IDs of analysis datasource
    *
@@ -475,6 +481,57 @@ public class AnalysisResource {
       return buildOkResponse();
     } catch ( PentahoAccessControlException e ) {
       return buildUnauthorizedResponse();
+    }
+  }
+
+  /**
+   * Get ACL for the analysis data source by name
+   *
+   * @param catalog analysis data source name
+   * @return        ACL or null if the data source doesn't have it
+   * @throws        PentahoAccessControlException if the user doesn't have access
+   */
+  @GET
+  @Path( "/{catalog : .+}/acl" )
+  @Produces ( { APPLICATION_XML, APPLICATION_JSON } )
+  @StatusCodes( {
+      @ResponseCode( code = 200, condition = "Successfully got the ACL" ),
+      @ResponseCode( code = 401, condition = "Unauthorized" ),
+      @ResponseCode(
+          code = 500,
+          condition = "ACL failed to be retrieved. This could be caused by an invalid path, or the file does not exist."
+      )
+  } )
+  public RepositoryFileAclDto doGetAnalysisDatasourceAcl( @PathParam( "catalog" ) String catalog )
+      throws PentahoAccessControlException {
+    return service.getAnalysisDatasourceAcl( catalog );
+  }
+
+  /**
+   * Set ACL for the analysis data source
+   *
+   * @param catalog analysis data source name
+   * @param acl     ACL to set
+   * @return        response
+   * @throws        PentahoAccessControlException if the user doesn't have access
+   */
+  @PUT
+  @Path( "/{catalog : .+}/acl" )
+  @Produces ( { APPLICATION_XML, APPLICATION_JSON } )
+  @StatusCodes( {
+      @ResponseCode( code = 200, condition = "Successfully updated the ACL" ),
+      @ResponseCode( code = 401, condition = "Unauthorized" ),
+      @ResponseCode( code = 500, condition = "Failed to save acls due to another error." )
+  } )
+  public Response doSetAnalysisDatasourceAcl( @PathParam( "catalog" ) String catalog, RepositoryFileAclDto acl )
+      throws PentahoAccessControlException {
+    try {
+      service.setAnalysisDatasourceAcl( catalog, acl );
+      return buildOkResponse();
+    } catch ( PentahoAccessControlException e ) {
+      return buildUnauthorizedResponse();
+    } catch ( Exception e ) {
+      return buildServerErrorResponse();
     }
   }
 }
