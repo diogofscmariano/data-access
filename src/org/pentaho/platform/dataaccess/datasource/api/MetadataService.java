@@ -27,7 +27,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
-import org.pentaho.platform.api.repository2.unified.RepositoryFile;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileAcl;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.messages.Messages;
 import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
 import org.pentaho.platform.engine.core.system.PentahoSystem;
@@ -35,13 +35,12 @@ import org.pentaho.platform.plugin.services.importer.IPlatformImportBundle;
 import org.pentaho.platform.plugin.services.importer.IPlatformImporter;
 import org.pentaho.platform.plugin.services.importer.PlatformImportException;
 import org.pentaho.platform.plugin.services.importer.RepositoryFileImportBundle;
-import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclAdapter;
+import org.pentaho.platform.repository2.unified.jcr.IAclShadowNodeHelper;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
 import org.pentaho.platform.web.http.api.resources.FileResource;
 
 import com.sun.jersey.core.header.FormDataContentDisposition;
 import com.sun.jersey.multipart.FormDataBodyPart;
-import org.pentaho.platform.web.http.api.resources.services.FileService;
 
 public class MetadataService extends DatasourceService {
 
@@ -82,7 +81,7 @@ public class MetadataService extends DatasourceService {
     Object reservedCharsObject = fr.doGetReservedChars().getEntity();
     String reservedChars = objectToString( reservedCharsObject );
     if ( reservedChars != null
-      && domainId.matches( ".*[" + reservedChars.replaceAll( "/", "" ) + "]+.*" ) ) {
+        && domainId.matches( ".*[" + reservedChars.replaceAll( "/", "" ) + "]+.*" ) ) {
       String msg = prohibitedSymbolMessage( domainId, fr );
       throw new PlatformImportException( msg, PlatformImportException.PUBLISH_PROHIBITED_SYMBOLS_ERROR );
     }
@@ -110,19 +109,16 @@ public class MetadataService extends DatasourceService {
     if ( !canAdministerCheck() ) {
       throw new PentahoAccessControlException();
     }
-    RepositoryFile aclNode = null;
-    // TODO: get the ACL node
-    return aclNode == null ? null : fileService.doGetFileAcl( aclNode.getPath() );
+    return getAcl( domainId, IAclShadowNodeHelper.DatasourceType.METADATA );
   }
 
-  public void setMetadataAcl( String domainId, RepositoryFileAclDto acl )
+  public void setMetadataAcl( String domainId, RepositoryFileAclDto aclDto )
       throws PentahoAccessControlException, FileNotFoundException {
     if ( !canAdministerCheck() ) {
       throw new PentahoAccessControlException();
     }
-    RepositoryFile aclNode = null;
-    // TODO: get the ACL node, create the node if needed
-    fileService.setFileAcls( aclNode.getPath(), acl );
+    final RepositoryFileAcl acl = aclDto == null ? null : repositoryFileAclAdapter.unmarshal( aclDto );
+    aclHelper.setAclFor( domainId, IAclShadowNodeHelper.DatasourceType.METADATA, acl );
   }
 
   protected void sleep( int i ) throws InterruptedException {
@@ -171,7 +167,7 @@ public class MetadataService extends DatasourceService {
         new RepositoryFileImportBundle.Builder().input( metadataFile ).charSet( "UTF-8" ).hidden( false )
             .overwriteFile( overWriteInRepository ).mime( "text/xmi+xml" ).withParam( "domain-id", domainId );
     if ( acl != null ) {
-      builder.acl( new RepositoryFileAclAdapter().unmarshal( acl ) );
+      builder.acl( repositoryFileAclAdapter.unmarshal( acl ) );
     }
     return builder;
   }

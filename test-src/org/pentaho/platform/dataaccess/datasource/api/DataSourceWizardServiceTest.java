@@ -30,6 +30,10 @@ import org.pentaho.metadata.util.XmiParser;
 import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
 import org.pentaho.platform.api.repository.datasource.IDatasourceMgmtService;
+import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileAcl;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileSid;
 import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IDSWDatasourceService;
@@ -38,7 +42,12 @@ import org.pentaho.platform.plugin.action.mondrian.catalog.MondrianCatalogServic
 import org.pentaho.platform.plugin.services.importer.IPlatformImportBundle;
 import org.pentaho.platform.plugin.services.importer.IPlatformImporter;
 import org.pentaho.platform.plugin.services.importexport.legacy.MondrianCatalogRepositoryHelper;
+import org.pentaho.platform.repository2.unified.jcr.IAclShadowNodeHelper;
+import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclAdapter;
+import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
+import org.pentaho.platform.web.http.api.resources.services.FileService;
 
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.io.InputStream;
@@ -62,6 +71,8 @@ public class DataSourceWizardServiceTest {
     dataSourceWizardService.mondrianCatalogService = mock( IMondrianCatalogService.class );
     dataSourceWizardService.datasourceMgmtSvc = mock( IDatasourceMgmtService.class );
     dataSourceWizardService.modelerService = mock( IModelerService.class );
+    dataSourceWizardService.aclHelper = mock( IAclShadowNodeHelper.class );
+    dataSourceWizardService.fileService = mock( FileService.class );
   }
 
   @After
@@ -105,7 +116,7 @@ public class DataSourceWizardServiceTest {
     try {
       Map<String, InputStream> response = dataSourceWizardService.doGetDSWFilesAsDownload( "dswId" );
       fail();
-    } catch ( PentahoAccessControlException pace) {
+    } catch ( PentahoAccessControlException pace ) {
       //expected
     }
 
@@ -130,7 +141,7 @@ public class DataSourceWizardServiceTest {
     doReturn( mockObject ).when( mockLogicalModel ).getProperty( "MondrianCatalogRef" );
     doReturn( mockIPentahoSession ).when( dataSourceWizardService ).getSession();
     doNothing().when( dataSourceWizardService.mondrianCatalogService ).removeCatalog(
-      "not null", mockIPentahoSession );
+        "not null", mockIPentahoSession );
     doNothing().when( dataSourceWizardService.metadataDomainRepository ).removeDomain( dswId );
 
     dataSourceWizardService.removeDSW( "dswId" );
@@ -181,7 +192,7 @@ public class DataSourceWizardServiceTest {
     try {
       dataSourceWizardService.removeDSW( "dswId" );
       fail();
-    } catch ( PentahoAccessControlException pace) {
+    } catch ( PentahoAccessControlException pace ) {
       //expected
     }
 
@@ -196,9 +207,9 @@ public class DataSourceWizardServiceTest {
     doReturn( mockObject ).when( mockLogicalModel ).getProperty( "MondrianCatalogRef" );
     doReturn( mockIPentahoSession ).when( dataSourceWizardService ).getSession();
     doNothing().when( dataSourceWizardService.mondrianCatalogService ).removeCatalog(
-      "not null", mockIPentahoSession );
+        "not null", mockIPentahoSession );
     doThrow( mockDatasourceServiceException ).when( dataSourceWizardService.dswService ).deleteLogicalModel( null,
-      null );
+        null );
 
     dataSourceWizardService.removeDSW( "dswId" );
 
@@ -248,7 +259,7 @@ public class DataSourceWizardServiceTest {
 
   @Test
   public void testPublishDsw() throws Exception {
-    String domainId = "domainId";
+    String domainId = "domainId.xmi";
     InputStream metadataFile = mock( InputStream.class );
     boolean overwrite = true;
     boolean checkConnection = false;
@@ -263,20 +274,24 @@ public class DataSourceWizardServiceTest {
     String mockObject = "not null";
     String dswId = "dswId";
 
+    final RepositoryFileAclDto aclDto = new RepositoryFileAclDto();
+    aclDto.setOwner( "owner" );
+    aclDto.setOwnerType( RepositoryFileSid.Type.USER.ordinal() );
+
     doReturn( true ).when( dataSourceWizardService ).hasManageAccessCheck();
     doReturn( true ).when( dataSourceWizardService ).endsWith( anyString(), anyString() );
     doReturn( mockXmiParser ).when( dataSourceWizardService ).createXmiParser();
     doReturn( mockDomain ).when( mockXmiParser ).parseXmi( metadataFile );
     doReturn( mockInputStream ).when( dataSourceWizardService ).toInputStreamWrapper( mockDomain, mockXmiParser );
     doReturn( mockMetadataBundle ).when( dataSourceWizardService ).createMetadataDswBundle( mockDomain, mockInputStream,
-      overwrite );
-    doReturn( mockMondrianBundle ).when( dataSourceWizardService ).createMondrianDswBundle( mockDomain );
+        overwrite, aclDto );
+    doReturn( mockMondrianBundle ).when( dataSourceWizardService ).createMondrianDswBundle( mockDomain, aclDto );
     doReturn( mockIPlatformImporter ).when( dataSourceWizardService ).getIPlatformImporter();
     doReturn( mockIPentahoSession ).when( dataSourceWizardService ).getSession();
 
-    String response = dataSourceWizardService.publishDsw( domainId, metadataFile, overwrite, checkConnection, null );
+    String response = dataSourceWizardService.publishDsw( domainId, metadataFile, overwrite, checkConnection, aclDto );
 
-    verify( dataSourceWizardService, times( 1 ) ).publishDsw( domainId, metadataFile, overwrite, checkConnection, null );
+    verify( dataSourceWizardService, times( 1 ) ).publishDsw( domainId, metadataFile, overwrite, checkConnection, aclDto );
     assertEquals( domainId, response );
   }
 
@@ -363,5 +378,73 @@ public class DataSourceWizardServiceTest {
     verify( dataSourceWizardService, times( 1 ) ).publishDsw( domainId, null, overwrite, checkConnection, null );
     verify( dataSourceWizardService, times( 1 ) ).publishDsw( domainId, metadataFile, false, checkConnection, null );
     verify( dataSourceWizardService, times( 1 ) ).publishDsw( domainId, metadataFile, overwrite, true, null );
+  }
+
+  @Test
+  public void testGetDSWAcl() throws Exception {
+    String domainId = "domainId";
+
+    final RepositoryFileAcl acl = new RepositoryFileAcl.Builder( "owner" ).build();
+
+    doReturn( true ).when( dataSourceWizardService ).canAdministerCheck();
+    when( dataSourceWizardService.aclHelper.getAclFor( anyString(), any( IAclShadowNodeHelper.DatasourceType.class ) ) )
+        .thenReturn( acl );
+    final IUnifiedRepository repository = mock( IUnifiedRepository.class );
+    when( dataSourceWizardService.fileService.getRepository() ).thenReturn( repository );
+    when( dataSourceWizardService.fileService.doGetFileAcl( anyString() ) ).thenReturn( new RepositoryFileAclAdapter().marshal( acl ) );
+    final RepositoryFile repositoryFile = mock( RepositoryFile.class );
+    when( repository.getFileById( anyString() ) ).thenReturn( repositoryFile );
+    final RepositoryFileAclDto aclDto = dataSourceWizardService.getDSWAcl( domainId );
+
+    verify( dataSourceWizardService.aclHelper ).getAclFor( domainId, IAclShadowNodeHelper.DatasourceType.METADATA );
+
+    assertEquals( acl, new RepositoryFileAclAdapter().unmarshal( aclDto ) );
+  }
+
+  @Test
+  public void testGetDSWAclNoAcl() throws Exception {
+    String domainId = "domainId";
+
+    doReturn( true ).when( dataSourceWizardService ).canAdministerCheck();
+    when( dataSourceWizardService.aclHelper.getAclFor( anyString(), any( IAclShadowNodeHelper.DatasourceType.class ) ) )
+        .thenReturn( null );
+    final RepositoryFileAclDto aclDto = dataSourceWizardService.getDSWAcl( domainId );
+
+    verify( dataSourceWizardService.aclHelper ).getAclFor( domainId, IAclShadowNodeHelper.DatasourceType.METADATA );
+
+    assertNull( aclDto );
+  }
+
+  @Test
+  public void testSetMetadataDatasourceAcl() throws Exception {
+    String domainId = "domainId";
+
+    final RepositoryFileAclDto aclDto = new RepositoryFileAclDto();
+    aclDto.setOwner( "owner" );
+    aclDto.setOwnerType( RepositoryFileSid.Type.USER.ordinal() );
+
+    doReturn( true ).when( dataSourceWizardService ).canAdministerCheck();
+
+    dataSourceWizardService.setDSWAcl( domainId, aclDto );
+
+    final RepositoryFileAcl acl = new RepositoryFileAclAdapter().unmarshal( aclDto );
+    verify( dataSourceWizardService.aclHelper ).setAclFor( domainId, IAclShadowNodeHelper.DatasourceType.METADATA,
+        acl );
+    verify( dataSourceWizardService.aclHelper ).setAclFor( domainId, IAclShadowNodeHelper.DatasourceType.MONDRIAN,
+        acl );
+  }
+
+  @Test
+  public void testSetMetadataDatasourceAclNoAcl() throws Exception {
+    String domainId = "domainId";
+
+    doReturn( true ).when( dataSourceWizardService ).canAdministerCheck();
+
+    dataSourceWizardService.setDSWAcl( domainId, null );
+
+    verify( dataSourceWizardService.aclHelper ).setAclFor( domainId, IAclShadowNodeHelper.DatasourceType.METADATA,
+        null );
+    verify( dataSourceWizardService.aclHelper ).setAclFor( domainId, IAclShadowNodeHelper.DatasourceType.MONDRIAN,
+        null );
   }
 }
