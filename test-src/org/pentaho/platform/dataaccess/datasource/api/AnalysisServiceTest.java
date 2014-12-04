@@ -35,6 +35,7 @@ import org.mockito.ArgumentMatcher;
 import org.pentaho.metadata.repository.IMetadataDomainRepository;
 import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileAcl;
 import org.pentaho.platform.api.repository2.unified.RepositoryFileSid;
 import org.pentaho.platform.plugin.action.mondrian.catalog.IMondrianCatalogService;
 import org.pentaho.platform.plugin.action.mondrian.catalog.MondrianCatalog;
@@ -43,6 +44,7 @@ import org.pentaho.platform.plugin.services.importer.IPlatformImporter;
 import org.pentaho.platform.plugin.services.importexport.legacy.MondrianCatalogRepositoryHelper;
 
 import com.sun.jersey.core.header.FormDataContentDisposition;
+import org.pentaho.platform.repository2.unified.jcr.IAclShadowNodeHelper;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclAdapter;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
 
@@ -56,6 +58,7 @@ public class AnalysisServiceTest {
     analysisService.metadataDomainRepository = mock( IMetadataDomainRepository.class );
     analysisService.mondrianCatalogService = mock( IMondrianCatalogService.class );
     analysisService.importer = mock( IPlatformImporter.class );
+    analysisService.aclHelper = mock( IAclShadowNodeHelper.class );
   }
 
   @After
@@ -167,21 +170,53 @@ public class AnalysisServiceTest {
     boolean xmlaEnabledFlag = true;
     String parameters = "parameters";
 
-    final RepositoryFileAclDto acl = new RepositoryFileAclDto();
-    acl.setOwner( "owner" );
-    acl.setOwnerType( RepositoryFileSid.Type.USER.ordinal() );
+    final RepositoryFileAclDto aclDto = new RepositoryFileAclDto();
+    aclDto.setOwner( "owner" );
+    aclDto.setOwnerType( RepositoryFileSid.Type.USER.ordinal() );
 
     doNothing().when( analysisService ).accessValidation();
 
-    analysisService.putMondrianSchema( dataInputStream, schemaFileInfo, catalogName, origCatalogName, dataSourceName, true, xmlaEnabledFlag, parameters, acl );
+    analysisService.putMondrianSchema( dataInputStream, schemaFileInfo, catalogName, origCatalogName, dataSourceName, true, xmlaEnabledFlag, parameters, aclDto );
 
-    verify( analysisService, times( 1 ) ).putMondrianSchema( dataInputStream, schemaFileInfo, catalogName, origCatalogName, dataSourceName, true, xmlaEnabledFlag, parameters, acl );
+    verify( analysisService, times( 1 ) ).putMondrianSchema( dataInputStream, schemaFileInfo, catalogName, origCatalogName, dataSourceName, true, xmlaEnabledFlag, parameters, aclDto );
 
     verify( analysisService.importer ).importFile( argThat( new ArgumentMatcher<IPlatformImportBundle>() {
       @Override public boolean matches( Object argument ) {
         IPlatformImportBundle bundle = (IPlatformImportBundle) argument;
-        return new RepositoryFileAclAdapter().unmarshal( acl ).equals( bundle.getAcl() );
+        return new RepositoryFileAclAdapter().unmarshal( aclDto ).equals( bundle.getAcl() );
       }
     } ) );
+  }
+
+  @Test
+  public void testGetAnalysisDatasourceAcl() throws Exception {
+    String catalogName = "catalogName";
+
+    final RepositoryFileAcl acl = new RepositoryFileAcl.Builder( "owner" ).build();
+
+    doReturn( true ).when( analysisService ).canAdministerCheck();
+    when( analysisService.aclHelper.getAclFor( anyString(), any( IAclShadowNodeHelper.DatasourceType.class ) ) )
+        .thenReturn( acl );
+    final RepositoryFileAclDto aclDto = analysisService.getAnalysisDatasourceAcl( catalogName );
+
+    verify( analysisService.aclHelper ).getAclFor( catalogName, IAclShadowNodeHelper.DatasourceType.MONDRIAN );
+
+    assertEquals( acl, new RepositoryFileAclAdapter().unmarshal( aclDto ) );
+  }
+
+  @Test
+  public void testSetAnalysisDatasourceAcl() throws Exception {
+    String catalogName = "catalogName";
+
+    final RepositoryFileAclDto aclDto = new RepositoryFileAclDto();
+    aclDto.setOwner( "owner" );
+    aclDto.setOwnerType( RepositoryFileSid.Type.USER.ordinal() );
+
+    doReturn( true ).when( analysisService ).canAdministerCheck();
+
+    analysisService.setAnalysisDatasourceAcl( catalogName, aclDto );
+
+    verify( analysisService.aclHelper ).setAclFor( catalogName, IAclShadowNodeHelper.DatasourceType.MONDRIAN,
+        new RepositoryFileAclAdapter().unmarshal( aclDto ) );
   }
 }

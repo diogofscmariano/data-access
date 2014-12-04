@@ -42,7 +42,6 @@ import org.pentaho.platform.api.engine.IPentahoSession;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
 import org.pentaho.platform.api.repository.datasource.IDatasourceMgmtService;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
-import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.dataaccess.datasource.api.DataSourceWizardService.DswPublishValidationException.Type;
 import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
 import org.pentaho.platform.dataaccess.datasource.utils.DataAccessPermissionUtil;
@@ -60,9 +59,8 @@ import org.pentaho.platform.plugin.services.importer.IPlatformImporter;
 import org.pentaho.platform.plugin.services.importer.RepositoryFileImportBundle;
 import org.pentaho.platform.plugin.services.importexport.legacy.MondrianCatalogRepositoryHelper;
 import org.pentaho.platform.plugin.services.metadata.IPentahoMetadataDomainRepositoryExporter;
-import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclAdapter;
+import org.pentaho.platform.repository2.unified.jcr.IAclShadowNodeHelper;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAclDto;
-import org.pentaho.platform.web.http.api.resources.services.FileService;
 
 public class DataSourceWizardService extends DatasourceService {
 
@@ -206,15 +204,14 @@ public class DataSourceWizardService extends DatasourceService {
     }
     // build bundles
     InputStream metadataIn = toInputStreamWrapper( domain, xmiParser );
-    IPlatformImportBundle metadataBundle = createMetadataDswBundle( domain, metadataIn, overwrite );
-    IPlatformImportBundle mondrianBundle = createMondrianDswBundle( domain );
+    IPlatformImportBundle metadataBundle = createMetadataDswBundle( domain, metadataIn, overwrite, acl );
+    IPlatformImportBundle mondrianBundle = createMondrianDswBundle( domain, acl );
     // do import
     IPlatformImporter importer = getIPlatformImporter();
     importer.importFile( metadataBundle );
     logger.debug( "imported metadata xmi" );
     importer.importFile( mondrianBundle );
     logger.debug( "imported mondrian schema" );
-    // TODO: publish ACL for the DSW
     // trigger refreshes
     IPentahoSession session = getSession();
     PentahoSystem.publish( session, METADATA_PUBLISHER );
@@ -223,23 +220,39 @@ public class DataSourceWizardService extends DatasourceService {
     return domainId;
   }
 
+  /**
+   * Retrieve ACL of the DSW. Actually it is ACL of it's Metadata.
+   *
+   * @param dswId dsw id
+   * @return ACL
+   * @throws PentahoAccessControlException
+   */
   public RepositoryFileAclDto getDSWAcl( String dswId ) throws PentahoAccessControlException {
     if ( !canAdministerCheck() ) {
       throw new PentahoAccessControlException();
     }
-    RepositoryFile aclNode = null;
-    // TODO: get the ACL node
-    return aclNode == null ? null : fileService.doGetFileAcl( aclNode.getPath() );
+    return repositoryFileAclAdapter.marshal(
+        aclHelper.getAclFor( dswId, IAclShadowNodeHelper.DatasourceType.METADATA ) );
   }
 
+  /**
+   * Set ACL to both Mondrian Catalog and Metadata Schema
+   *
+   * @param dswId dsw id
+   * @param acl ACL
+   * @throws PentahoAccessControlException
+   * @throws FileNotFoundException
+   */
   public void setDSWAcl( String dswId, RepositoryFileAclDto acl )
       throws PentahoAccessControlException, FileNotFoundException {
     if ( !canAdministerCheck() ) {
       throw new PentahoAccessControlException();
     }
-    RepositoryFile aclNode = null;
-    // TODO: get the ACL node, create the node if needed
-    fileService.setFileAcls( aclNode.getPath(), acl );
+
+    aclHelper.setAclFor( dswId, IAclShadowNodeHelper.DatasourceType.MONDRIAN,
+        repositoryFileAclAdapter.unmarshal( acl ) );
+    aclHelper.setAclFor( dswId, IAclShadowNodeHelper.DatasourceType.METADATA,
+        repositoryFileAclAdapter.unmarshal( acl ) );
   }
 
   public static class DswPublishValidationException extends Exception {
@@ -275,15 +288,19 @@ public class DataSourceWizardService extends DatasourceService {
     return dswId.substring( 0, dswId.lastIndexOf( '.' ) );
   }
 
-  protected IPlatformImportBundle createMetadataDswBundle( Domain domain, InputStream metadataIn, boolean overwrite ) {
-    return new RepositoryFileImportBundle.Builder()
+  protected IPlatformImportBundle createMetadataDswBundle( Domain domain, InputStream metadataIn, boolean overwrite, RepositoryFileAclDto acl ) {
+    final RepositoryFileImportBundle.Builder builder = new RepositoryFileImportBundle.Builder()
         .input( metadataIn )
         .charSet( ENCODING )
         .hidden( false )
         .overwriteFile( overwrite )
         .mime( METADATA_MIME )
         .withParam( IMPORT_DOMAIN_ID, domain.getId() )
-        .preserveDsw( true )
+        .preserveDsw( true );
+    if ( acl != null ) {
+      builder.acl( repositoryFileAclAdapter.unmarshal( acl ) );
+    }
+    return builder
         .build();
   }
 
@@ -294,7 +311,7 @@ public class DataSourceWizardService extends DatasourceService {
    * @throws DatasourceServiceException 
    * @throws Exception If schema generation fails
    */
-  protected IPlatformImportBundle createMondrianDswBundle( Domain domain ) throws DatasourceServiceException,
+  protected IPlatformImportBundle createMondrianDswBundle( Domain domain, RepositoryFileAclDto acl ) throws DatasourceServiceException,
     DswPublishValidationException, IOException {
     final String analysisDomainId = toAnalysisDomainId( domain.getId() );
     final String dataSource = ModelerService.getMondrianDatasource( domain );
@@ -319,16 +336,18 @@ public class DataSourceWizardService extends DatasourceService {
       throw new DswPublishValidationException( Type.INVALID_XMI, e.getMessage() );
     }
     // create bundle
-    IPlatformImportBundle metadataBundle = new RepositoryFileImportBundle.Builder()
-      .input( IOUtils.toInputStream( mondrianSchema, ENCODING ) )
-      .name( MONDRIAN_SCHEMA_NAME )
-      .charSet( ENCODING )
-      .overwriteFile( true )
-      .mime( MONDRIAN_MIME )
-      .withParam( IMPORT_DOMAIN_ID, analysisDomainId )
-      .withParam( MONDRIAN_CONNECTION_PARAM, "DataSource=" + dataSource )
-      .build();
-    return metadataBundle;
+    final RepositoryFileImportBundle.Builder builder = new RepositoryFileImportBundle.Builder()
+        .input( IOUtils.toInputStream( mondrianSchema, ENCODING ) )
+        .name( MONDRIAN_SCHEMA_NAME )
+        .charSet( ENCODING )
+        .overwriteFile( true )
+        .mime( MONDRIAN_MIME )
+        .withParam( IMPORT_DOMAIN_ID, analysisDomainId )
+        .withParam( MONDRIAN_CONNECTION_PARAM, "DataSource=" + dataSource );
+    if ( acl != null ) {
+      builder.acl( repositoryFileAclAdapter.unmarshal( acl ) );
+    }
+    return builder.build();
   }
 
   protected boolean canAdministerCheck() {
